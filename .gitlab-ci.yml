@@ -1,0 +1,109 @@
+stages:
+  - build
+  - code_style_test
+  - integration_test
+  - deploy
+
+after_script:
+  - chmod +x $TELBOT_SCRIPT
+  - bash $TELBOT_SCRIPT
+
+variables:
+  SRC_DIR: "src/utils_src"
+  CAT_DIR: "$CI_PROJECT_DIR/$SRC_DIR/cat"
+  GREP_DIR: "$CI_PROJECT_DIR/$SRC_DIR/grep"
+  CAT_EXE: "s21_cat"
+  GREP_EXE: "s21_grep"
+  CAT_BUILD_DIR: "$CI_PROJECT_DIR/$SRC_DIR/cat/build"
+  GREP_BUILD_DIR: "$CI_PROJECT_DIR/$SRC_DIR/grep/build"
+  DEPLOY_SCRIPT: "$CI_PROJECT_DIR/src/deploy_script.sh"
+  TELBOT_SCRIPT: "$CI_PROJECT_DIR/src/tel_bot.sh"
+
+build_cat:
+  stage: build
+  before_script:
+    - mkdir -p $CAT_BUILD_DIR
+  script:
+    - echo "Building cat utility..."
+    - cd "$CAT_DIR"
+    - make $CAT_EXE
+    - cp $CAT_EXE ./build
+    - cd "$CI_PROJECT_DIR"
+
+  artifacts:
+    paths:
+      - $CAT_BUILD_DIR/
+
+    expire_in: 30 days
+
+build_grep:
+  stage: build
+  before_script:
+    - mkdir -p $GREP_BUILD_DIR
+  script:
+    - echo "Building grep utility..."
+    - cd "$GREP_DIR"
+    - make $GREP_EXE
+    - cp "$GREP_EXE" ./build
+    - cd "$CI_PROJECT_DIR"
+  artifacts:
+    paths:
+      - $GREP_BUILD_DIR
+
+    expire_in: 30 days
+
+check_style_cat:
+  stage: code_style_test
+  script:
+    - echo "Performing style tests for cat utility..."
+    - cd "$CAT_DIR"
+    - make check_style
+    - cd "$CI_PROJECT_DIR"
+  needs:
+    - build_cat
+
+check_style_grep:
+  stage: code_style_test
+  script:
+    - echo "Performing style tests for grep utility..."
+    - cd "$GREP_DIR"
+    - make check_style
+    - cd "$CI_PROJECT_DIR"
+  needs:
+    - build_grep
+
+test_cat:
+  stage: integration_test
+  script:
+    - echo "Performing integration tests for cat utility..."
+    - cd "$CAT_DIR"
+    - make test_func
+    - cd "$CI_PROJECT_DIR"
+  needs:
+    - build_cat
+    - check_style_cat
+test_grep:
+  stage: integration_test
+  script:
+    - echo "Performing integration tests for grep utility..."
+    - cd "$GREP_DIR"
+    - make test_func
+    - cd "$CI_PROJECT_DIR"
+  needs:
+    - build_grep
+    - check_style_grep
+
+deploy_utils:
+  stage: deploy
+  script:
+    - echo "Deploying to the second VM..."
+    - chmod +x $DEPLOY_SCRIPT
+    - bash $DEPLOY_SCRIPT
+
+  dependencies:
+    - build_cat
+    - build_grep
+    - check_style_cat
+    - check_style_grep
+    - test_cat
+    - test_grep
